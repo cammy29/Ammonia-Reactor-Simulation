@@ -1,0 +1,520 @@
+clc; clear all;
+Bed 1
+Variable input conditions bed 1
+FinT = 902.038*1              %902.038                              %total feed molar flowrate (Kmol/hr)
+PBar=225            %Pressure in BAR (bar) (will automatically converted to ATM)
+X0 = 0;             %initial Conversion of Nitrogen
+T0 =  673           %Temperature entering the reactor (K)
+
+yn2= 0.245887             %0.30        %0.245887      %0.249700  %0.220000  %0.999960  %0.6248715  %0.700     %mole fraction of nitrogen in feed
+yh2= 0.730106             %0.69        %0.730106      %0.741937  %0.729931  %0.000010  %0.3709685  %0.290     %mole fraction of hydrogen in feed
+ynh3=0.00979263           %0.008       %0.00979263    %0.006500  %0.006500  %0.000010  %0.0032500  %0.001     %mole fraction of ammonia in feed
+yar= 0.0140633            %0.001       %0.0140633     %0.001620  %0.050000  %0.000010  %0.0008100  %0.008     %mole fraction of argon in feed
+yo2= 0.000150814          %0.001       %0.000150814   %0.000200  %0.000400  %0.000010  %0.0001000  %0.001     %mole fraction of oxygen in feed
+
+Is_the_composition_legal = yo2+yar+ynh3+yh2+yn2 %Must =1
+
+A = 0.1;             %area of reactor bed (m^2)
+Alpha = 0.5;        %constant for modified temkin rate eqn (range 0.5 to 0.75)
+Constants bed 1
+R = 8.314;            %Universal Gas Constant (kJ/kmol K)
+
+FinN = yn2*FinT      %total feed flowrate for nitrogen (Kmol/hr)
+FinH = yh2*FinT      %total feed flowrate for Hyrdigeb (Kmol/hr)
+FinNH3 = ynh3*FinT   %total feed flowrate for Ammonia (Kmol/hr)
+FinAR = yar*FinT     %total feed flowrate for Argon (Kmol/hr)
+FinO2 = yo2*FinT     %total feed flowrate for Oxygen (Kmol/hr)
+
+P = PBar*0.9869233;   %Pressure converted to atm (atm)
+k0 = 8.849E14;        %Ahrrenius coefficient
+Ea = 170560;          %Activation energy (kJ/kmol)
+Constants for effectivness factor (Linear interpolation) bed 1
+b0 = -8.2125534;
+b1 = 0.03774149;
+b2 = 6.190112;
+b3 = -5.354571E-5;
+b4 = -20.86963;
+b5 = 2.379142E-8;
+b6 = 27.88403;
+Setting length and step size bed 1
+Lrange1=3.5;
+dL=0.00005; %Step Size
+L = 0:dL:Lrange1; %Integration Limits
+Setting matrix size bed 1
+N=zeros(size(L)); %effectiveness factor 
+FugacityN2=zeros(size(L));%coefficient for nitrogen
+FugacityH2=zeros(size(L));%coefficient for hydrogen
+FugacityNH3=zeros(size(L));%coefficient for ammonia
+DeltaHr=zeros(size(L)); %heat of reaction
+CPmix=zeros(size(L));%heat capacity
+
+CP_NH3=zeros(size(L));
+CP_H2=zeros(size(L));
+CP_N2=zeros(size(L));
+CP_Ar=zeros(size(L));
+CP_O2=zeros(size(L));
+
+CCPmix=zeros(size(L));
+
+YN2=zeros(size(L));% mol fraction N2
+YH2=zeros(size(L));% mol fraction H2
+YNH3=zeros(size(L));% mol fraction NH3
+AN2=zeros(size(L));%activation coeff nitrogen
+AH2=zeros(size(L)); %activation coeff hydrogen
+ANH3=zeros(size(L));%activation coeff ammonia 
+k= zeros(size(L)); %constant
+ka=zeros(size(L));%equilbrium contant
+Rate_NH3=zeros(size(L));%rate of ammonia formation
+T=zeros(size(L)); %temp 
+X=zeros(size(L));%conversion
+T(1)=T0;  % the initial value of T
+X(1) =X0;  % the initial X value
+n=numel(X);
+Loop to solve equation bed 1
+for i=1:n-1
+    N(i)= b0+(b1*T(i))+(b2*X(i))+(b3*(T(i)^2))+(b4*(X(i)^2))+(b5*(T(i)^3))+(b6*(X(i)^3)); %Impirical Effectivness factor
+
+    FugacityN2(i) = 0.93431737 + (0.2028538E-3)*T(i) + (0.295896110E-3)*P - (0.270727E-6)*(T(i)^2) + ((0.4775207E-6)*(P^2)); 
+    FugacityH2(i) = exp(exp(-3.8402*(T(i)^0.125)+0.541)*P - exp(-0.1263*(T(i)^0.5)-15.98)*P^2 + 300*exp(-0.011901*T(i)-5.941) * exp(-P/300));         
+    FugacityNH3(i) = 0.1438996 + (0.2028538E-2)*T(i) - (0.4487672E-3)*P - (0.1142945E-5)*(T(i)^2) + (0.2761216E-6)*(P^2); 
+   
+    DeltaHr(i) =    4.184*(-1*P*(0.54526+(840.609/T(i))+((459.7341E6)/(T(i)^3)))-5.34685*T(i)-(0.2525E-3)*(T(i)^2)+(1.69167E-6)*(T(i)^3)-9157.09); %Heat of reaction
+
+    CP_NH3(i)= 19.99563	+ 49.77119*T(i) + (-15.37599*(T(i)^2)) + 1.921168*T(i)^3 + (0.189174/((T(i)^2))); % Valid for 298 to 1400K
+    CP_H2(i)= 33.066178 + ((-11.363417)*T(i)) + (11.432816*(T(i)^2)) + ((-2.772874)*T(i)^3) + (-0.158558/(T(i)^2)); %Valid for 298 to 1000K
+    CP_N2(i)= 19.50583 + 19.88705*T(i) -8.598535*T(i)^2 + 1.369784	*T(i)^3 + 0.527601	/((T(i)^2)); %Valid for 500 to 2000K
+    CP_Ar(i)= 20.78600 + ((2.825911E-7)*T(i)) - ((1.464191E-7)*(T(i)^2)) + ((1.092131E-8)*(T(i)^3)) + ((-3.661371E-8)/((T(i)^2))); %Valid for 298 to 6000K
+    CP_O2(i)= 30.03235 + 8.772972*T(i) + ((-3.988133)*T(i)^2) + (0.788313*T(i)^3) + (-0.741599/(T(i)^2));
+    CPmix(i) = (YH2(i)*CP_H2(i) + YNH3(i)*CP_NH3(i) + YN2(i)*CP_N2(i) + CP_Ar(i)*yar + CP_O2(i)*yo2)/1000;
+    %Assumung a linear sumamtion of thermodynamic propertires
+
+    %CP_H2(i) = 4.184*(6.952+((-0.04567E-2)*(T(i)))+((0.09563E-5)*(T(i))^2)+((-0.2079E-9)*(T(i))^3));
+    %CP_N2(i) = 4.184*(6.903+((-0.03753E-2)*(T(i)))+((0.193E-5)*(T(i))^2)+((-0.6861E-9)*(T(i))^3));
+    %CP_Ar(i) = 4.184*(4.75);
+    %CP_NH3(i) = 4.184*(6.5846 - T(i)*(0.61251E-2) + (T(i)^2)*(0.23663E-5)-(T(i)^3)*(1.5981E-9)+96.1678-0.067571*P+T(i)*(-0.2225+(1.6847E-4)*(P))+(T(i)^2)*((1.289E-4)-(1.0095E-7)*P));
+    %CPmix(i) = ((YH2(i)*CP_H2(i) + YNH3(i)*CP_NH3(i) + YN2(i)*CP_N2(i) + CP_Ar(i)*yar))*1000;
+    
+    %CCPmix(i) = 35.31 + (0.02*T(i)) + (0.00000694*T(i)^2) - (0.0056*P) + (0.000014*P*T(i));
+    
+    YN2(i)   = (yn2*(1-X(i)))/(1-(2*X(i)*yn2));
+    YH2(i)   = (yh2 - (3*(X(i))*yn2))/(1-(2*(X(i)*yn2)));
+    YNH3(i)  = (ynh3 + (2*(X(i))*yn2))/(1-(2*(X(i)*yn2)));
+    
+    AH2(i) = YH2(i)*FugacityH2(i)*P;
+    AN2(i) = YN2(i)*FugacityN2(i)*P;
+    ANH3(i) = YNH3(i)*FugacityNH3(i)*P;
+
+    k(i) = k0*exp(-Ea/(R*T(i)));
+    ka(i)  = 10^((-2.691122*(log10(T(i)))-((5.519265E-5)*T(i))+((1.848863E-7)*T(i)^2)+(2001.6/T(i))+2.6899));
+
+    Rate_NH3(i)=(2*k(i)*((ka(i)^2*AN2(i)*((AH2(i)^3/ANH3(i)^2)^Alpha)-((ANH3(i)^2/AH2(i)^3)^(1-Alpha)))));
+
+
+    dTdL = (N(i)*(-DeltaHr(i))*A*Rate_NH3(i))/(FinT*CPmix(i));
+    dXdL = (N(i)*A*Rate_NH3(i))/(2*FinN);
+
+    X(i+1)=X(i)+ (dL*dXdL); %cringe
+    T(i+1)=T(i)+ (dL*dTdL); %cringe
+
+end
+Bed 2 - HE cooler inbetween R1 & R2
+Variable input conditions bed 2
+PBar_2=225            %Pressure in BAR (bar) (will automatically converted to ATM)
+X0_2 = X(1,end) ;       %initial Conversion of Nitrogen
+T0_2 = 690               %Kelvin
+
+FinN_2= FinN - X0_2*FinN;
+FinH_2 = FinH - X0_2 * FinN *3;
+FinNH3_2 = FinNH3 + X0_2 *FinN *2;
+FinAR_2 = yar*FinT;           %mole fraction of argon
+FinO2_2 = yo2*FinT;          %mole fraction of oxygen
+
+FinT_2 = FinN_2 + FinH_2 + FinNH3_2    ;   %total feed molar flowrate (Kmol/hr)
+
+yn2_2=  FinN_2/FinT_2 ;      %mole fraction of nitrogen in feed
+yh2_2=  FinH_2/FinT_2  ;    %mole fraction of hydrogen in feed
+ynh3_2= FinNH3_2/FinT_2 ;      %mole fraction of ammonia in feed
+yAr_2 = FinAR_2/FinT_2;
+yO2_2 = FinO2_2/FinT_2;
+
+A_2 = 0.1;             %area of reactor bed (m^2)
+Alpha_2 = 0.5;        %constant for modified temkin rate eqn (range 0.5 to 0.75)
+Constants bed 2
+R_2 = 8.314;            %Universal Gas Constant (kJ/kmol K)
+
+%FinN_2 = yn2_2*FinT_2;      %total feed flowrate for nitrogen (Kmol/hr)
+P_2 = PBar_2*0.9869233;   %Pressure converted to atm (atm)
+k0_2 = 8.849E14;        %Ahrrenius coefficient
+Ea_2 = 170560;          %Activation energy (kJ/kmol)
+Setting length and step size bed 2
+Lrange2 = Lrange1 + 4.5;
+dL_2=0.00003; %Step Size
+L_2 = 3.5:dL:Lrange2; %Integration Limits
+L2plot = L_2 ;
+Setting matrix size bed 2
+N_2=zeros(size(L_2)); %effectiveness factor 
+FugacityN2_2=zeros(size(L_2));%coefficient for nitrogen
+FugacityH2_2=zeros(size(L_2));%coefficient for hydrogen
+FugacityNH3_2=zeros(size(L_2));%coefficient for ammonia
+DeltaHr_2=zeros(size(L_2)); %heat of reaction
+CPmix_2=zeros(size(L_2));%heat capacity
+
+CP_NH3_2=zeros(size(L_2));
+CP_H2_2=zeros(size(L_2));
+CP_N2_2=zeros(size(L_2));
+CP_Ar_2=zeros(size(L_2));
+CP_O2_2=zeros(size(L_2));
+
+YN2_2=zeros(size(L_2));% mol fraction N2
+YH2_2=zeros(size(L_2));% mol fraction H2
+YNH3_2=zeros(size(L_2));% mol fraction NH3
+AN2_2=zeros(size(L_2));%activation coeff nitrogen
+AH2_2=zeros(size(L_2)); %activation coeff hydrogen
+ANH3_2=zeros(size(L_2));%activation coeff ammonia 
+k_2= zeros(size(L_2)); %constant
+ka_2=zeros(size(L_2));%equilbrium contant
+Rate_NH3_2=zeros(size(L_2));%rate of ammonia formation
+T_2=zeros(size(L_2)); %temp 
+X_2=zeros(size(L_2));%conversion
+T_2(1)=T0_2;  % the initial value of T
+X_2(1) =X0_2;  % the initial X value
+n_2=numel(X_2);
+Loop to solve equation bed 2
+for i=1:n_2-1
+    N_2(i)= b0+(b1*T_2(i))+(b2*X_2(i))+(b3*(T_2(i)^2))+(b4*(X_2(i)^2))+(b5*(T_2(i)^3))+(b6*(X_2(i)^3)); %Impirical Effectivness factor
+
+    FugacityN2_2(i) = 0.93431737 + (0.2028538E-3)*T_2(i) + (0.295896110E-3)*P_2 - (0.270727E-6)*(T_2(i)^2) + ((0.4775207E-6)*((P_2)^2)); 
+    FugacityH2_2(i) = exp(exp(-3.8402*(T_2(i)^0.125)+0.541)*P_2 - exp(-0.1263*(T_2(i)^0.5)-15.98)*(P_2)^2 + 300*exp(-0.011901*T_2(i)-5.941) * exp(-(P_2)/300));         
+    FugacityNH3_2(i) = 0.1438996 + (0.2028538E-2)*T_2(i) - (0.4487672E-3)*P_2 - (0.1142945E-5)*(T_2(i)^2) + (0.2761216E-6)*((P_2)^2); 
+   
+    DeltaHr_2(i) =    4.184*(-1*P_2*(0.54526+(840.609/T_2(i))+((459.7341E6)/(T_2(i)^3)))-5.34685*T_2(i)-(0.2525E-3)*(T_2(i)^2)+(1.69167E-6)*(T_2(i)^3)-9157.09); %Heat of reaction
+
+    CP_NH3_2(i)= 19.99563	+ 49.77119*T_2(i) + (-15.37599*(T_2(i)^2)) + 1.921168*T_2(i)^3 + (0.189174/((T_2(i)^2))); % Valid for 298 to 1400K
+    CP_H2_2(i)= 33.066178 + ((-11.363417)*(T_2(i))) + (11.432816*((T_2(i))^2)) + ((-2.772874)*(T_2(i))^3) + (-0.158558/((T_2(i))^2)); %Valid for 298 to 1000K
+    CP_N2_2(i)= 19.50583 + 19.88705*T_2(i) -8.598535*T_2(i)^2 + 1.369784	*T_2(i)^3 + 0.527601	/((T_2(i)^2)); %Valid for 500 to 2000K
+    CP_Ar_2(i)= 20.78600 + ((2.825911E-7)*T_2(i)) - ((1.464191E-7)*(T_2(i)^2)) + ((1.092131E-8)*(T_2(i)^3)) + ((-3.661371E-8)/((T_2(i)^2))); %Valid for 298 to 6000K
+    CP_O2_2(i)= 30.03235 + 8.772972*T_2(i) + ((-3.988133)*T_2(i)^2) + (0.788313*T_2(i)^3) + (-0.741599/(T_2(i)^2));
+    CPmix_2(i) = (YH2_2(i)*CP_H2_2(i) + YNH3_2(i)*CP_NH3_2(i) + YN2_2(i)*CP_N2_2(i) + CP_Ar_2(i)*yar + CP_O2_2(i)*yo2)/1000;
+%Assumung a linear sumamtion of thermodynamic propertires
+
+
+
+  %  CP_H2_2(i) = 4.184*(6.952+((-0.04567E-2)*(T_2(i)))+((0.09563E-5)*(T_2(i))^2)+((-0.2079E-9)*(T_2(i))^3));
+  %  CP_N2_2(i) = 4.184*(6.903+((-0.03753E-2)*(T_2(i)))+((0.193E-5)*(T_2(i))^2)+((-0.6861E-9)*(T_2(i))^3));
+  %  CP_Ar_2(i) = 4.184*(4.75);
+   % CP_NH3_2(i) = 4.184*(6.5846 - T_2(i)*(0.61251E-2) + (T_2(i)^2)*(0.23663E-5)-(T_2(i)^3)*(1.5981E-9)+96.1678-0.067571*P+T_2(i)*(-0.2225+(1.6847E-4)*(P))+(T_2(i)^2)*((1.289E-4)-(1.0095E-7)*P));
+  %  CPmix_2(i) = ((YH2_2(i)*CP_H2_2(i) + YNH3_2(i)*CP_NH3_2(i) + YN2_2(i)*CP_N2_2(i) + CP_Ar_2(i)*yAr_2))*FinT;
+
+    
+    %CPmix_2(i) = 35.31 + (0.02*T_2(i)) + (0.00000694*T_2(i)^2) - (0.0056*P_2) + (0.000014*P_2*T_2(i));
+    
+    YN2_2(i)   = (yn2*(1-X_2(i)))/(1-(2*X_2(i)*yn2));
+    YH2_2(i)   = (yh2 - (3*(X_2(i))*yn2))/(1-(2*(X_2(i)*yn2)));
+    YNH3_2(i)  = (ynh3 + (2*(X_2(i))*yn2))/(1-(2*(X_2(i)*yn2)));
+    
+    AH2_2(i) = YH2_2(i)*FugacityH2_2(i)*P_2;
+    AN2_2(i) = YN2_2(i)*FugacityN2_2(i)*P_2;
+    ANH3_2(i) = YNH3_2(i)*FugacityNH3_2(i)*P_2;
+
+    k_2(i) = k0_2*exp(-Ea/(R*T_2(i)));
+    ka_2(i)  = 10^((-2.691122*(log10(T_2(i)))-((5.519265E-5)*T_2(i))+((1.848863E-7)*T_2(i)^2)+(2001.6/T_2(i))+2.6899));
+
+    Rate_NH3_2(i)=(2*k_2(i)*((ka_2(i)^2*AN2_2(i)*((AH2_2(i)^3/ANH3_2(i)^2)^Alpha_2)-((ANH3_2(i)^2/AH2_2(i)^3)^(1-Alpha_2)))));
+
+
+    dTdL_2 = (N_2(i)*(-DeltaHr_2(i))*A_2*Rate_NH3_2(i))/(FinT_2*CPmix_2(i));
+    dXdL_2 = (N_2(i)*A_2*Rate_NH3_2(i))/(2*FinN_2);
+
+    X_2(i+1)=X_2(i)+ (dL_2*dXdL_2); %cringe
+    T_2(i+1)=T_2(i)+ (dL_2*dTdL_2); %cringe
+
+end
+Bed 3 HE cooler inbetween R2 & R3
+Variable input conditions bed 3
+PBar_3=225            %Pressure in BAR (bar) (will automatically converted to ATM)
+X0_3 = X_2(1,end);        %initial Conversion of Nitrogen
+T0_3 = 700               %Kelvin
+
+FinN_3= FinN - X0_3*FinN;
+FinH_3 = FinH - X0_3 * FinN *3;
+FinNH3_3 = FinNH3 + X0_3 *FinN *2;
+FinAR_3 = yar*FinT;           %mole fraction of argon
+FinO2_3 = yo2*FinT;          %mole fraction of oxygen
+
+FinT_3 = FinN_3 + FinH_3 + FinNH3_3  ;     %total feed molar flowrate (Kmol/hr)
+
+
+yn2_3=  FinN_3/FinT_3 ;      %mole fraction of nitrogen in feed
+yh2_3=  FinH_3/FinT_3  ;    %mole fraction of hydrogen in feed
+ynh3_3= FinNH3_3/FinT_3 ;      %mole fraction of ammonia in feed
+yAr_3 = FinAR_3/FinT_3;
+yO2_3 = FinO2_3/FinT_3;
+
+A_3 = 0.1;             %area of reactor bed (m^2)
+Alpha_3 = 0.5;        %constant for modified temkin rate eqn (range 0.5 to 0.75)
+
+Constants bed 3
+R_3 = 8.314;            %Universal Gas Constant (kJ/kmol K)
+P_3 = PBar_3*0.9869233;   %Pressure converted to atm (atm)
+k0_3 = 8.849E14;        %Ahrrenius coefficient
+Ea_3 = 170560;          %Activation energy (kJ/kmol)
+Setting length and step size bed 3
+Lrange3 =  Lrange1+Lrange2 +1.5 ;
+dL_3=0.000008; %Step Size
+L_3 = Lrange2:dL:Lrange3; %Integration Limits
+L3plot = L_3;
+Setting matrix size bed 3
+N_3=zeros(size(L_3)); %effectiveness factor 
+FugacityN2_3=zeros(size(L_3));%coefficient for nitrogen
+FugacityH2_3=zeros(size(L_3));%coefficient for hydrogen
+FugacityNH3_3=zeros(size(L_3));%coefficient for ammonia
+DeltaHr_3=zeros(size(L_3)); %heat of reaction
+CPmix_3=zeros(size(L_3));%heat capacity
+
+CP_NH3_3=zeros(size(L_3));
+CP_H2_3=zeros(size(L_3));
+CP_N2_3=zeros(size(L_3));
+CP_Ar_3=zeros(size(L_3));
+CP_O2_3=zeros(size(L_3));
+
+YN2_3=zeros(size(L_3));% mol fraction N2
+YH2_3=zeros(size(L_3));% mol fraction H2
+YNH3_3=zeros(size(L_3));% mol fraction NH3
+AN2_3=zeros(size(L_3));%activation coeff nitrogen
+AH2_3=zeros(size(L_3)); %activation coeff hydrogen
+ANH3_3=zeros(size(L_3));%activation coeff ammonia 
+k_3= zeros(size(L_3)); %constant
+ka_3=zeros(size(L_3));%equilbrium contant
+Rate_NH3_3=zeros(size(L_3));%rate of ammonia formation
+T_3=zeros(size(L_3)); %temp 
+X_3=zeros(size(L_3));%conversion
+T_3(1)=T0_3;  % the initial value of T
+X_3(1) =X0_3;  % the initial X value
+n_3=numel(X_3);
+Loop to solve equation bed 3
+for i=1:n_3-1
+    N_3(i)= b0+(b1*T_3(i))+(b2*X_3(i))+(b3*(T_3(i)^2))+(b4*(X_3(i)^2))+(b5*(T_3(i)^3))+(b6*(X_3(i)^3)); %Impirical Effectivness factor
+
+    FugacityN2_3(i) = 0.93431737 + (0.2028538E-3)*T_3(i) + (0.295896110E-3)*P_3 - (0.270727E-6)*(T_3(i)^2) + ((0.4775207E-6)*((P_3)^2)); 
+    FugacityH2_3(i) = exp(exp(-3.8402*(T_3(i)^0.125)+0.541)*P_3 - exp(-0.1263*(T_3(i)^0.5)-15.98)*(P_3)^2 + 300*exp(-0.011901*T_3(i)-5.941) * exp(-(P_3)/300));         
+    FugacityNH3_3(i) = 0.1438996 + (0.2028538E-2)*T_3(i) - (0.4487672E-3)*P_3 - (0.1142945E-5)*(T_3(i)^2) + (0.2761216E-6)*((P_3)^2); 
+   
+
+    DeltaHr_3(i) = 4.184*(-1*P_3*(0.54526+(840.609/T_3(i))+((459.7341E6)/(T_3(i)^3)))-5.34685*T_3(i)-(0.2525E-3)*(T_3(i)^2)+(1.69167E-6)*(T_3(i)^3)-9157.09); %Heat of reaction
+
+    CP_NH3_3(i)= 19.99563	+ 49.77119*T_3(i) + (-15.37599*(T_3(i)^2)) + 1.921168*T_3(i)^3 + (0.189174/((T_3(i)^2))); % Valid for 298 to 1400K
+    CP_H2_3(i)= 33.066178 + ((-11.363417)*(T_3(i))) + (11.432816*((T_3(i))^2)) + ((2.772874)*(T_3(i))^3) + (-0.158558/((T_3(i))^2)); %Valid for 298 to 1000K
+   CP_N2_3(i)= 19.50583 + 19.88705*T_3(i) -8.598535*T_3(i)^2 + 1.369784	*T_3(i)^3 + 0.527601	/((T_3(i)^2)); %Valid for 500 to 2000K
+    CP_Ar_3(i)= 20.78600 + ((2.825911E-7)*T_3(i)) - ((1.464191E-7)*(T_3(i)^2)) + ((1.092131E-8)*(T_3(i)^3)) + ((-3.661371E-8)/((T_3(i)^2))); %Valid for 298 to 6000K
+    CP_O2_3(i)= 30.03235 + 8.772972*T_3(i) + ((-3.988133)*T_3(i)^2) + (0.788313*T_3(i)^3) + (-0.741599/(T_3(i)^2));
+    CPmix_3(i) = (YH2_3(i)*CP_H2_3(i) + YNH3_3(i)*CP_NH3_3(i) + YN2_3(i)*CP_N2_3(i) + CP_Ar_3(i)*yar + CP_O2_3(i)*yo2)/1000;
+
+%    CP_H2_3(i) = 4.184*(6.952+((-0.04567E-2)*(T_3(i)))+((0.09563E-5)*(T_3(i))^2)+((-0.2079E-9)*(T_3(i))^3));
+%    CP_N2_3(i) = 4.184*(6.903+((-0.03753E-2)*(T_3(i)))+((0.193E-5)*(T_3(i))^2)+((-0.6861E-9)*(T_3(i))^3));
+ %   CP_Ar_3(i) = 4.184*(4.75);
+ %   CP_NH3_3(i) = 4.184*(6.5846 - T_3(i)*(0.61251E-2) + (T_3(i)^2)*(0.23663E-5)-(T_3(i)^3)*(1.5981E-9)+96.1678-0.067571*P+T_3(i)*(-0.2225+(1.6847E-4)*(P))+(T_3(i)^2)*((1.289E-4)-(1.0095E-7)*P));
+ %   CPmix_3(i) = ((YH2_3(i)*CP_H2_3(i) + YNH3_3(i)*CP_NH3_3(i) + YN2_3(i)*CP_N2_3(i) + CP_Ar_3(i)*yAr_3))*FinT;
+
+
+
+    %CPmix_3(i) = 35.31 + (0.02*T_3(i)) + (0.00000694*T_3(i)^2) - (0.0056*P_3) + (0.000014*P_3*T_3(i));
+    
+    YN2_3(i)   = (yn2*(1-X_3(i)))/(1-(2*X_3(i)*yn2));
+    YH2_3(i)   = (yh2 - (3*(X_3(i))*yn2))/(1-(2*(X_3(i)*yn2)));
+    YNH3_3(i)  = (ynh3 + (2*(X_3(i))*yn2))/(1-(2*(X_3(i)*yn2)));
+    
+    AH2_3(i) = YH2_3(i)*FugacityH2_3(i)*P_3;
+    AN2_3(i) = YN2_3(i)*FugacityN2_3(i)*P_3;
+    ANH3_3(i) = YNH3_3(i)*FugacityNH3_3(i)*P_3;
+
+    k_3(i) = k0_3*exp(-Ea/(R*T_3(i)));
+    ka_3(i)  = 10^((-2.691122*(log10(T_3(i)))-((5.519265E-5)*T_3(i))+((1.848863E-7)*T_3(i)^2)+(2001.6/T_3(i))+2.6899));
+
+    Rate_NH3_3(i)=(2*k_3(i)*((ka_3(i)^2*AN2_3(i)*((AH2_3(i)^3/ANH3_3(i)^2)^Alpha_3)-((ANH3_3(i)^2/AH2_3(i)^3)^(1-Alpha_3)))));
+
+
+    dTdL_3 = (N_3(i)*(-DeltaHr_3(i))*A_3*Rate_NH3_3(i))/(FinT_3*CPmix_3(i));
+    dXdL_3 = (N_3(i)*A_3*Rate_NH3_3(i))/(2*FinN_3);
+
+    X_3(i+1)=X_3(i)+ (dL_3*dXdL_3); %cringe
+    T_3(i+1)=T_3(i)+ (dL_3*dTdL_3); %cringe
+
+end
+
+
+
+ABC =ones(71,1);
+ABC1 = 0.1379*ABC;
+YYY = 673:1:743.2555;
+YYY1 = fliplr(YYY);
+
+ABCC =ones(25,1);
+ABCC1 = 0.18945*ABCC;
+YYYY = 673:1:697.618;
+YYYY1 = fliplr(YYYY);
+
+flipflip = rot90(fliplr(T));
+Lengthofthing = rot90(fliplr(L));
+Cool Graphs
+nexttile
+plot(T,X,T_2,X_2,T_3,X_3);
+hold on
+    %plot(YYY1,ABC1,'k');
+    %plot(YYYY1,ABCC1,'k');
+    %plot(T_2,X_2,'r');
+    %plot(T_3,X_3);
+grid on
+xlabel('Temperature (Kelvin)')
+ylabel('Conversion')
+title('Conversion in each bed Vs temperature in each bed')
+    %yline(X(1,end))
+    %yline(X_2(1,end))
+    %legend('bed 1', 'bed 2', 'bed 3')
+    %yyaxis right
+     %plot(T,ka,T_2,ka_2,T,ka_3);
+     %ylim(0.01)
+     %ylim([0 0.09])
+        %
+hold off
+
+            %nexttile
+            %%plot(Lrange1,N)
+            %hold on
+            %plot(L2plot,N_2)
+            %plot(L3plot,N_3)
+            %grid on
+            %hold off
+
+nexttile
+plot(L,X)
+hold on
+plot(L2plot,X_2)
+plot(L3plot,X_3)
+xticks([1,2,3,4,5,6,7,8,9,10,11,12,13])
+legend('bed 1', 'bed 2', 'bed 3')
+xlabel('Length (Meters)')
+ylabel('Conversion')
+xline(L(1,end),'k')
+xline(L2plot(1,end),'k')
+xline(L3plot(1,end),'k')
+title('Conversion in reactor vs bed length with steady state feed in (902kmol/hr)')
+grid on
+hold off
+
+nexttile
+plot(L,N)
+hold on
+plot(L2plot,N_2)
+plot(L3plot,N_3)
+xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13])
+legend('bed 1', 'bed 2', 'bed 3')
+xlabel('Length (Meters)')
+ylabel('effectiveness factor of catalyst')
+xline(L(1,end),'k',LineWidth=2)
+xline(L2plot(1,end),'k',LineWidth=2)
+xline(L3plot(1,end),'k',LineWidth=2)
+xline(0,'k',LineWidth=2)
+yline(0,'k',LineWidth=2)
+            %yline(1,'k',LineWidth=2)
+title('Effectiveness Vs Bed length')
+grid on
+hold off
+
+nexttile
+plot(L,Rate_NH3)  %k
+hold on
+xlabel('length (Meters)')
+ylabel('rate constant')
+xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13])
+title('Equlibrium rate constant Vs Length')
+grid on
+plot(L2plot,Rate_NH3_2)
+plot(L3plot,Rate_NH3_3)
+legend('bed 1', 'bed 2', 'bed 3')
+xline(L(1,end),'k',LineWidth=2)
+xline(L2plot(1,end),'k',LineWidth=2)
+xline(L3plot(1,end),'k',LineWidth=2)
+xline(0,'k',LineWidth=2)
+hold off
+
+nexttile;
+plot(L,T)
+hold on
+plot(L2plot,T_2)
+plot(L3plot,T_3)
+grid on
+legend('bed 1','bed 2','Bed 3')
+title('Temperature in reactor at different lengths')
+xlabel('length (Meters)')
+ylabel('Temperature (Kelvin)')
+xticks([0,1,2,3,4,5,6,7,8,9,10,11,12,13])
+yticks([670,680,690,700,710,720,730,740,750,760,770,780])
+xline(L(1,end),'k',LineWidth=2)
+xline(L2plot(1,end),'k',LineWidth=2)
+xline(L3plot(1,end),'k',LineWidth=2)
+xline(0,'k',LineWidth=2)
+hold off
+
+nexttile
+plot(L,YNH3,'k')
+hold on
+plot(L,YH2,'b')
+plot(L,YN2,'y')
+plot(L2plot,YNH3_2,'k')
+plot(L3plot,YNH3_3,'k')
+plot(L2plot,YH2_2,'b')
+plot(L3plot,YH2_3,'b')
+plot(L2plot,YN2_2,'y')
+plot(L3plot,YN2_3,'y')
+xline(L(1,end),'k',LineWidth=2)
+xline(L2plot(1,end),'k',LineWidth=2)
+xline(L3plot(1,end),'k',LineWidth=2)
+legend('Ammonia', 'Hydrogen', 'Nitrogen')
+grid on
+title('Change in mole fraction vs length')
+xlabel('Length(Meters)')
+ylabel('Mole Fraction')
+hold off
+
+            %plot(T,CCPmix)
+            %hold on
+            %plot(T,CPmix)
+            %grid on
+            %hold off
+Output composition from the reactor :D
+% N2 + 3H2 -> 2NH3
+
+X0_Out = X_3(1,end);
+
+FinN_Out= FinN-(X0_Out)*FinN;
+FinH_Out = FinH-(X0_Out) * FinN*3;
+FinNH3_Out = FinNH3 +(X0_Out) *FinN*2;
+FinAR_Out = yar*FinT;          
+FinO2_Out = yo2*FinT;         
+
+
+FinT_Out = FinH_Out + FinNH3_Out + FinN_Out + FinAR_Out + FinO2_Out; %total feed molar flowrate (Kmol/hr)
+
+
+yn2_Fraction_Out=  (FinN_Out/FinT_Out)*100     
+yh2_Fraction_Out=  (FinH_Out/FinT_Out)*100 
+ynh3_Fraction_Out= (FinNH3_Out/FinT_Out)*100
+yAr_Fraction_Out = (FinAR_Out/FinT_Out)*100
+yO2_Fraction_Out = (FinO2_Out/FinT_Out)*100
+
+Output_Temperature_Bed_1= T(1,end)
+Output_Temperature_Bed_2= T_2(1,end)
+Output_Temperature_Bed_3= T_3(1,end)
+Pie Chart of exit compositon
+figure;
+XYZ = [yn2_Fraction_Out yh2_Fraction_Out yAr_Fraction_Out yO2_Fraction_Out ynh3_Fraction_Out];
+%labels ={'N2', 'H2', 'ar', 'O2','NH3' }
+pie3(XYZ)
+hold on
+title('Mole fraction of output stream')
+legend ('N2', 'H2', 'ar', 'O2','NH3' )
+hold off
+
+NitrogenConversion_bed_1 = X(1,end)
+NitrogenConversion_bed_2 = X_2(1,end)
+NitrogenConversion_bed_3 = X_3(1,end)
